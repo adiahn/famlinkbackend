@@ -6,6 +6,12 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "dev:simple": "nodemon src/server-simple.js",
+    "dev:fixed": "nodemon src/server-fixed.js",
+    "dev:working": "nodemon src/server-working.js",
+    "simple": "node src/server-simple.js",
+    "fixed": "node src/server-fixed.js",
+    "working": "node src/server-working.js",
     "build": "echo 'No build step required'",
     "vercel-build": "echo 'Vercel build completed'",
     "generate-secrets": "node scripts/generate-secrets.js",

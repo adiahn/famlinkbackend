@@ -19,12 +19,22 @@ const connectDB = async () => {
       throw new Error('MongoDB URI is not defined in environment variables');
     }
 
-    const conn = await mongoose.connect(mongoURI, {
+    // Add connection timeout
+    const connectionPromise = mongoose.connect(mongoURI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
       bufferCommands: false, // Disable mongoose buffering
     });
+
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Database connection timeout'));
+      }, 10000); // 10 second timeout
+    });
+
+    const conn = await Promise.race([connectionPromise, timeoutPromise]);
 
     // Cache the connection
     cachedConnection = conn;

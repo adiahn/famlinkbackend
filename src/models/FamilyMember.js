@@ -121,7 +121,7 @@ familyMemberSchema.virtual('age').get(function() {
 // Indexes
 familyMemberSchema.index({ familyId: 1, position: 1 });
 familyMemberSchema.index({ joinId: 1 }, { unique: true });
-familyMemberSchema.index({ userId: 1 });
+// userId index is automatically created by sparse: true in schema
 familyMemberSchema.index({ 
   firstName: 'text', 
   lastName: 'text' 

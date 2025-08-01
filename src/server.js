@@ -22,8 +22,11 @@ const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB only if not in serverless environment
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  // Try to connect to MongoDB, but don't block server startup
   connectDB().catch(err => {
-    logger.error('Failed to connect to database during startup:', err);
+    logger.warn('⚠️  MongoDB connection failed during startup:', err.message);
+    logger.info('🚀 Server will start without database connection');
+    logger.info('📝 Database will be connected on first request');
   });
 }
 
@@ -87,7 +90,8 @@ app.get('/health', (req, res) => {
     success: true,
     message: 'FamTree API is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV
+    environment: process.env.NODE_ENV,
+    database: process.env.NODE_ENV === 'production' ? 'connected' : 'local'
   });
 });
 
@@ -107,6 +111,7 @@ app.use(errorHandler);
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
   const server = app.listen(PORT, () => {
     logger.info(`🚀 FamTree API server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+    logger.info(`📊 Health check available at: http://localhost:${PORT}/health`);
   });
 
   // Graceful shutdown
