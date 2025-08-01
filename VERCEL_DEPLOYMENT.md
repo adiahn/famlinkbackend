@@ -27,9 +27,18 @@ You'll need to configure these environment variables in Vercel:
 ```
 NODE_ENV=production
 MONGODB_URI_PROD=your_mongodb_atlas_connection_string
-JWT_SECRET=your_super_secret_jwt_key_change_this_in_production
+JWT_SECRET=your_generated_jwt_secret_here
 JWT_EXPIRES_IN=7d
 JWT_REFRESH_EXPIRES_IN=30d
+```
+
+**Generate JWT Secret:**
+```bash
+npm run generate-secrets
+```
+Or manually:
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
 ### Optional Variables

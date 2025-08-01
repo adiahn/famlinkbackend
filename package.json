@@ -8,6 +8,7 @@
     "dev": "nodemon src/server.js",
     "build": "echo 'No build step required'",
     "vercel-build": "echo 'Vercel build completed'",
+    "generate-secrets": "node scripts/generate-secrets.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/",
