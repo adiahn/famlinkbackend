@@ -70,7 +70,7 @@ backend/
 - MongoDB (local or cloud instance)
 - npm or yarn
 
-### Installation
+### Local Development
 
 1. **Clone the repository**
    ```bash
@@ -104,6 +104,42 @@ backend/
    # Production mode
    npm start
    ```
+
+### Production Deployment
+
+#### Deploy to Vercel
+
+1. **Install Vercel CLI**
+   ```bash
+   npm install -g vercel
+   ```
+
+2. **Login to Vercel**
+   ```bash
+   vercel login
+   ```
+
+3. **Deploy**
+   ```bash
+   vercel --prod
+   ```
+
+4. **Set Environment Variables**
+   - Go to your Vercel project dashboard
+   - Navigate to Settings > Environment Variables
+   - Add all required environment variables
+
+For detailed deployment instructions, see [VERCEL_DEPLOYMENT.md](./VERCEL_DEPLOYMENT.md)
+
+#### Deploy to Other Platforms
+
+The backend is also compatible with:
+- **Railway**
+- **Render**
+- **Heroku**
+- **DigitalOcean App Platform**
+
+See the deployment guide for platform-specific instructions.
 
 ## 📚 API Documentation
 

@@ -2,10 +2,12 @@
   "name": "famtree-backend",
   "version": "1.0.0",
   "description": "FamTree Backend API with Express.js and MongoDB",
-  "main": "src/server.js",
+  "main": "api/index.js",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "build": "echo 'No build step required'",
+    "vercel-build": "echo 'Vercel build completed'",
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint src/",

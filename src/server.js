@@ -20,8 +20,29 @@ const searchRoutes = require('./routes/search');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB only if not in serverless environment
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  connectDB();
+}
+
+// Middleware to ensure database connection in serverless
+app.use(async (req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
+    try {
+      await connectDB();
+    } catch (error) {
+      logger.error('Failed to connect to database:', error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Database connection failed'
+        }
+      });
+    }
+  }
+  next();
+});
 
 // Security middleware
 app.use(helmet());
@@ -80,26 +101,28 @@ app.use(notFound);
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server
-const server = app.listen(PORT, () => {
-  logger.info(`🚀 FamTree API server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Process terminated');
-    process.exit(0);
+// Only start the server if not in serverless environment
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const server = app.listen(PORT, () => {
+    logger.info(`🚀 FamTree API server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
   });
-});
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    logger.info('Process terminated');
-    process.exit(0);
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM received, shutting down gracefully');
+    server.close(() => {
+      logger.info('Process terminated');
+      process.exit(0);
+    });
   });
-});
+
+  process.on('SIGINT', () => {
+    logger.info('SIGINT received, shutting down gracefully');
+    server.close(() => {
+      logger.info('Process terminated');
+      process.exit(0);
+    });
+  });
+}
 
 module.exports = app; 
