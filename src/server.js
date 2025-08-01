@@ -22,7 +22,9 @@ const PORT = process.env.PORT || 5000;
 
 // Connect to MongoDB only if not in serverless environment
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  connectDB();
+  connectDB().catch(err => {
+    logger.error('Failed to connect to database during startup:', err);
+  });
 }
 
 // Middleware to ensure database connection in serverless
@@ -32,11 +34,11 @@ app.use(async (req, res, next) => {
       await connectDB();
     } catch (error) {
       logger.error('Failed to connect to database:', error);
-      return res.status(500).json({
+      return res.status(503).json({
         success: false,
         error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Database connection failed'
+          code: 'SERVICE_UNAVAILABLE',
+          message: 'Database service is temporarily unavailable'
         }
       });
     }

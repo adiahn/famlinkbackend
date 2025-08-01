@@ -24,7 +24,6 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000,
       socketTimeoutMS: 45000,
       bufferCommands: false, // Disable mongoose buffering
-      bufferMaxEntries: 0, // Disable mongoose buffering
     });
 
     // Cache the connection
