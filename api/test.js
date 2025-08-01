@@ -3,6 +3,9 @@ module.exports = (req, res) => {
     success: true,
     message: 'Serverless function is working!',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'production',
+    deployment: 'Vercel Serverless',
+    method: req.method,
+    url: req.url
   });
 }; 

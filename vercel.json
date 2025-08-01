@@ -8,14 +8,15 @@
   ],
   "routes": [
     {
-      "src": "/test",
-      "dest": "/api/test.js"
-    },
-    {
       "src": "/(.*)",
       "dest": "/api/index.js"
     }
   ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30
+    }
+  },
   "env": {
     "NODE_ENV": "production"
   }

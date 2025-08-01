@@ -7,7 +7,7 @@ let cachedConnection = null;
 const connectDB = async () => {
   try {
     // If we already have a connection, return it
-    if (cachedConnection) {
+    if (cachedConnection && mongoose.connection.readyState === 1) {
       return cachedConnection;
     }
 
@@ -19,19 +19,25 @@ const connectDB = async () => {
       throw new Error('MongoDB URI is not defined in environment variables');
     }
 
-    // Add connection timeout
+    // Close existing connection if it exists but is not ready
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
+    }
+
+    // Add connection timeout with shorter duration for serverless
     const connectionPromise = mongoose.connect(mongoURI, {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
+      maxPoolSize: 5, // Reduced for serverless
+      serverSelectionTimeoutMS: 3000, // Shorter timeout
+      socketTimeoutMS: 10000, // Shorter timeout
       bufferCommands: false, // Disable mongoose buffering
+      bufferMaxEntries: 0, // Disable buffering
     });
 
-    // Add timeout to prevent hanging
+    // Add timeout to prevent hanging (shorter for serverless)
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
         reject(new Error('Database connection timeout'));
-      }, 10000); // 10 second timeout
+      }, 5000); // 5 second timeout for serverless
     });
 
     const conn = await Promise.race([connectionPromise, timeoutPromise]);
