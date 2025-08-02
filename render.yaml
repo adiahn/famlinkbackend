@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: famtree-backend
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    rootDir: backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        value: mongodb+srv://admin:admin123@cluster0.yk9yqnn.mongodb.net/famtree?retryWrites=true&w=majority&appName=Cluster0
+      - key: JWT_SECRET
+        value: b46c2a75dfd795e3d9bebc852cd0e2895019ca1cefe7d55e3ef12206b3d018e0e67f08ad3a88317f83f3960e874675844b1296ef5e23
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: CORS_ORIGIN
+        value: https://famlink.vercel.app,https://famlink-frontend.vercel.app
+      - key: RATE_LIMIT_WINDOW_MS
+        value: 900000
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100 

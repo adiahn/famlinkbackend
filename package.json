@@ -4,7 +4,7 @@
   "description": "FamTree Backend API with Express.js and MongoDB",
   "main": "src/server-render.js",
   "scripts": {
-    "start": "node src/server-render.js",
+    "start": "node start.js",
     "dev": "nodemon src/server.js",
     "dev:simple": "nodemon src/server-simple.js",
     "dev:fixed": "nodemon src/server-fixed.js",
