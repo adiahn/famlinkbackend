@@ -6,6 +6,12 @@ let cachedConnection = null;
 
 const connectDB = async () => {
   try {
+    // Debug: Log the MongoDB URI check
+    console.log('🔍 Database Debug:');
+    console.log('  NODE_ENV:', process.env.NODE_ENV);
+    console.log('  MONGODB_URI:', process.env.MONGODB_URI ? 'Present' : 'Missing');
+    console.log('  MONGODB_URI_PROD:', process.env.MONGODB_URI_PROD ? 'Present' : 'Missing');
+
     // If we already have a connection, return it
     if (cachedConnection && mongoose.connection.readyState === 1) {
       return cachedConnection;
@@ -15,7 +21,11 @@ const connectDB = async () => {
       ? process.env.MONGODB_URI_PROD 
       : process.env.MONGODB_URI;
 
+    console.log('  Using URI:', mongoURI ? 'Present' : 'Missing');
+
     if (!mongoURI) {
+      console.log('  ❌ No MongoDB URI found in environment variables');
+      console.log('  Available env vars:', Object.keys(process.env).filter(key => key.includes('MONGODB')));
       throw new Error('MongoDB URI is not defined in environment variables');
     }
 

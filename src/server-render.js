@@ -22,6 +22,15 @@ const app = express();
 
 console.log('🚀 Starting FamTree API for Render deployment...');
 
+// Debug: Log environment variables (without sensitive data)
+console.log('🔍 Environment Debug:');
+console.log('  NODE_ENV:', process.env.NODE_ENV);
+console.log('  PORT:', process.env.PORT);
+console.log('  MONGODB_URI:', process.env.MONGODB_URI ? 'Set' : 'NOT SET');
+console.log('  JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'NOT SET');
+console.log('  CORS_ORIGIN:', process.env.CORS_ORIGIN);
+console.log('  RENDER:', process.env.RENDER);
+
 // Security middleware
 app.use(helmet());
 
@@ -76,7 +85,8 @@ app.get('/health', async (req, res) => {
         NODE_ENV: process.env.NODE_ENV,
         RENDER: process.env.RENDER,
         MONGODB_URI: process.env.MONGODB_URI ? 'Set' : 'Not set',
-        JWT_SECRET: process.env.JWT_SECRET ? 'Set' : 'Not set'
+        JWT_SECRET: process.env.JWT_SECRET ? 'Set' : 'Not set',
+        PORT: process.env.PORT
       }
     });
   } catch (error) {
