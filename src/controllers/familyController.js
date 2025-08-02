@@ -134,7 +134,7 @@ const getMyFamily = async (req, res) => {
   }
 };
 
-// @desc    Add a new family member
+// @desc    Add a family member
 // @route   POST /api/families/:familyId/members
 // @access  Private
 const addFamilyMember = async (req, res) => {
@@ -142,6 +142,39 @@ const addFamilyMember = async (req, res) => {
     const { familyId } = req.params;
     const { firstName, lastName, relationship, birthYear, isDeceased, deathYear } = req.body;
     const userId = req.user.id;
+
+    // Validate required fields
+    if (!firstName || !lastName || !relationship || !birthYear) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'firstName, lastName, relationship, and birthYear are required'
+        }
+      });
+    }
+
+    // Validate isDeceased is boolean
+    if (typeof isDeceased !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'isDeceased must be a boolean value'
+        }
+      });
+    }
+
+    // Validate deathYear if isDeceased is true
+    if (isDeceased && !deathYear) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'deathYear is required when isDeceased is true'
+        }
+      });
+    }
 
     // Check if family exists and user is creator
     const family = await Family.findById(familyId);
@@ -168,6 +201,14 @@ const addFamilyMember = async (req, res) => {
     // Generate unique join ID
     const joinId = await generateJoinId();
 
+    // Handle avatar file upload if present
+    let avatarUrl = null;
+    if (req.file) {
+      // TODO: Upload file to cloud storage (AWS S3, etc.)
+      // For now, we'll store a placeholder
+      avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    }
+
     // Create family member
     const member = await FamilyMember.create({
       familyId,
@@ -176,10 +217,11 @@ const addFamilyMember = async (req, res) => {
       relationship,
       birthYear,
       isDeceased,
-      deathYear,
+      deathYear: isDeceased ? deathYear : undefined,
       joinId,
       isVerified: false,
-      isFamilyCreator: false
+      isFamilyCreator: false,
+      avatarUrl
     });
 
     logger.info(`Family member added: ${member.fullName} to family ${familyId}`);
@@ -190,10 +232,13 @@ const addFamilyMember = async (req, res) => {
       data: {
         member: {
           id: member._id,
+          firstName: member.firstName,
+          lastName: member.lastName,
           name: member.fullName,
           relationship: member.relationship,
           birthYear: member.birthYear,
           isDeceased: member.isDeceased,
+          deathYear: member.deathYear,
           isVerified: member.isVerified,
           isFamilyCreator: member.isFamilyCreator,
           joinId: member.joinId,
