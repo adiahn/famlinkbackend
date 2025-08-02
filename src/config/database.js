@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const logger = require('../utils/logger');
 
-// Cache the connection to avoid creating multiple connections in serverless
+// Cache the connection to avoid creating multiple connections
 let cachedConnection = null;
 
 const connectDB = async () => {
@@ -24,27 +24,23 @@ const connectDB = async () => {
       await mongoose.disconnect();
     }
 
-    // Add connection timeout with shorter duration for serverless
-    const connectionPromise = mongoose.connect(mongoURI, {
-      maxPoolSize: 5, // Reduced for serverless
-      serverSelectionTimeoutMS: 3000, // Shorter timeout
-      socketTimeoutMS: 10000, // Shorter timeout
-      bufferCommands: false, // Disable mongoose buffering
-    });
+    // Render-optimized connection options (traditional server)
+    const connectionOptions = {
+      maxPoolSize: 10, // Higher pool size for traditional server
+      serverSelectionTimeoutMS: 30000, // Longer timeout for Render
+      socketTimeoutMS: 45000, // Longer timeout
+      bufferCommands: true, // Enable mongoose buffering
+      connectTimeoutMS: 30000, // Connection timeout
+      heartbeatFrequencyMS: 10000, // Heartbeat frequency
+    };
 
-    // Add timeout to prevent hanging (shorter for serverless)
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('Database connection timeout'));
-      }, 5000); // 5 second timeout for serverless
-    });
-
-    const conn = await Promise.race([connectionPromise, timeoutPromise]);
+    // Connect to MongoDB
+    const conn = await mongoose.connect(mongoURI, connectionOptions);
 
     // Cache the connection
     cachedConnection = conn;
 
-    logger.info(`✅ MongoDB Connected: ${conn.connection.host}`);
+    logger.info(`✅ MongoDB Atlas connected successfully: ${conn.connection.host}`);
 
     // Handle connection events
     mongoose.connection.on('error', (err) => {
@@ -66,7 +62,7 @@ const connectDB = async () => {
   } catch (error) {
     logger.error('Database connection failed:', error.message);
     cachedConnection = null; // Clear cache on error
-    throw error; // Don't exit process in serverless environment
+    throw error;
   }
 };
 
