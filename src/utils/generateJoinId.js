@@ -20,7 +20,14 @@ const generateJoinId = async () => {
     }
 
     // Check if join ID already exists
-    const existingMember = await FamilyMember.findByJoinId(joinId);
+    let existingMember;
+    try {
+      existingMember = await FamilyMember.findByJoinId(joinId);
+    } catch (error) {
+      logger.error('Error checking existing join ID:', error);
+      throw new Error('Failed to check existing join ID');
+    }
+    
     attempts++;
 
     if (attempts >= maxAttempts) {
