@@ -20,33 +20,43 @@ const consoleFormat = winston.format.combine(
   })
 );
 
+// Check if we're in a serverless environment
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === 'production';
+
 // Create logger instance
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: logFormat,
   defaultMeta: { service: 'famtree-api' },
   transports: [
+    // Always use console transport
+    new winston.transports.Console({
+      format: consoleFormat
+    })
+  ],
+});
+
+// Add file transports only if not in serverless environment
+if (!isServerless) {
+  try {
     // Write all logs with level 'error' and below to error.log
-    new winston.transports.File({
+    logger.add(new winston.transports.File({
       filename: path.join(__dirname, '../../logs/error.log'),
       level: 'error',
       maxsize: 5242880, // 5MB
       maxFiles: 5,
-    }),
+    }));
+    
     // Write all logs with level 'info' and below to combined.log
-    new winston.transports.File({
+    logger.add(new winston.transports.File({
       filename: path.join(__dirname, '../../logs/combined.log'),
       maxsize: 5242880, // 5MB
       maxFiles: 5,
-    }),
-  ],
-});
-
-// If we're not in production, log to the console as well
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: consoleFormat
-  }));
+    }));
+  } catch (error) {
+    // If file system is not available, just use console
+    console.log('File logging not available, using console only');
+  }
 }
 
 module.exports = logger; 
