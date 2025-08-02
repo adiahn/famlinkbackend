@@ -99,17 +99,78 @@ const getMyFamily = async (req, res) => {
     // Get family members
     const members = await FamilyMember.findByFamilyId(family._id);
 
+    // Get linked families
+    const linkedFamilies = await LinkedFamilies.findLinkedFamilies(family._id);
+    
+    // Get members from linked families
+    const linkedMembers = [];
+    for (const link of linkedFamilies) {
+      const linkedFamilyId = link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId._id 
+        : link.mainFamilyId._id;
+      
+      const linkedFamilyMembers = await FamilyMember.findByFamilyId(linkedFamilyId);
+      
+      // Add linked family info to each member
+      const linkedFamilyName = link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId.name 
+        : link.mainFamilyId.name;
+      
+      linkedMembers.push(...linkedFamilyMembers.map(member => ({
+        ...member.toObject(),
+        linkedFamilyName,
+        isLinkedMember: true
+      })));
+    }
+
     // Format members for response
     const formattedMembers = members.map(member => ({
       id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
       name: member.fullName,
       relationship: member.relationship,
       birthYear: member.birthYear,
       isDeceased: member.isDeceased,
+      deathYear: member.deathYear,
       isVerified: member.isVerified,
       isFamilyCreator: member.isFamilyCreator,
       joinId: member.joinId,
-      avatarUrl: member.avatarUrl
+      joinIdUsed: member.joinIdUsed,
+      avatarUrl: member.avatarUrl,
+      isLinkedMember: false
+    }));
+
+    // Format linked members
+    const formattedLinkedMembers = linkedMembers.map(member => ({
+      id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      name: member.fullName,
+      relationship: member.relationship,
+      birthYear: member.birthYear,
+      isDeceased: member.isDeceased,
+      deathYear: member.deathYear,
+      isVerified: member.isVerified,
+      isFamilyCreator: member.isFamilyCreator,
+      joinId: member.joinId,
+      joinIdUsed: member.joinIdUsed,
+      avatarUrl: member.avatarUrl,
+      linkedFamilyName: member.linkedFamilyName,
+      isLinkedMember: true
+    }));
+
+    // Format linked families info
+    const formattedLinkedFamilies = linkedFamilies.map(link => ({
+      id: link._id,
+      linkedFamilyId: link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId._id 
+        : link.mainFamilyId._id,
+      linkedFamilyName: link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId.name 
+        : link.mainFamilyId.name,
+      linkedAt: link.linkedAt,
+      linkedBy: link.linkedBy
     }));
 
     res.json({
@@ -120,9 +181,12 @@ const getMyFamily = async (req, res) => {
           name: family.name,
           creatorId: family.creatorId,
           creatorJoinId: family.creatorJoinId,
-          isMainFamily: family.isMainFamily,
-          members: formattedMembers
-        }
+          isMainFamily: family.isMainFamily
+        },
+        members: formattedMembers,
+        linkedMembers: formattedLinkedMembers,
+        linkedFamilies: formattedLinkedFamilies,
+        totalMembers: formattedMembers.length + formattedLinkedMembers.length
       }
     });
   } catch (error) {
