@@ -26,11 +26,11 @@ const registerSchema = Joi.object({
       'string.pattern.base': 'Please enter a valid phone number',
       'any.required': 'Phone number is required'
     }),
-  dateOfBirth: Joi.date()
-    .max('now')
+  dateOfBirth: Joi.string()
+    .pattern(/^\d{4}-\d{2}-\d{2}$/)
     .required()
     .messages({
-      'date.max': 'Date of birth cannot be in the future',
+      'string.pattern.base': 'Date of birth must be in YYYY-MM-DD format',
       'any.required': 'Date of birth is required'
     }),
   password: Joi.string()
@@ -46,6 +46,18 @@ const registerSchema = Joi.object({
     .messages({
       'any.only': 'Passwords do not match',
       'any.required': 'Please confirm your password'
+    }),
+  email: Joi.string()
+    .email()
+    .optional()
+    .messages({
+      'string.email': 'Please enter a valid email address'
+    }),
+  gender: Joi.string()
+    .valid('male', 'female', 'other')
+    .optional()
+    .messages({
+      'any.only': 'Gender must be male, female, or other'
     })
 });
 

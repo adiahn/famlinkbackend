@@ -8,7 +8,7 @@ const logger = require('../utils/logger');
 // @access  Public
 const register = async (req, res) => {
   try {
-    const { firstName, lastName, phone, dateOfBirth, password } = req.body;
+    const { firstName, lastName, phone, dateOfBirth, password, email, gender } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findByPhone(phone);
@@ -28,7 +28,9 @@ const register = async (req, res) => {
       lastName,
       phone,
       dateOfBirth: new Date(dateOfBirth),
-      password
+      password,
+      email,
+      gender
     });
 
     // Generate verification code

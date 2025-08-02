@@ -30,7 +30,6 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 3000, // Shorter timeout
       socketTimeoutMS: 10000, // Shorter timeout
       bufferCommands: false, // Disable mongoose buffering
-      bufferMaxEntries: 0, // Disable buffering
     });
 
     // Add timeout to prevent hanging (shorter for serverless)

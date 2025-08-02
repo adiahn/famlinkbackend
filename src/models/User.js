@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
+  gender: {
+    type: String,
+    enum: ['male', 'female', 'other'],
+    trim: true
+  },
   dateOfBirth: {
     type: Date,
     required: [true, 'Date of birth is required']
@@ -39,6 +44,14 @@ const userSchema = new mongoose.Schema({
     minlength: [6, 'Password must be at least 6 characters']
   },
   isVerified: {
+    type: Boolean,
+    default: false
+  },
+  isPhoneVerified: {
+    type: Boolean,
+    default: false
+  },
+  isEmailVerified: {
     type: Boolean,
     default: false
   },
