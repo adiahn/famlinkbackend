@@ -25,11 +25,14 @@ const createFamily = async (req, res) => {
       });
     }
 
+    // Generate creator join ID if not provided
+    const finalCreatorJoinId = creatorJoinId || await generateJoinId();
+
     // Create the family
     const family = await Family.create({
       name,
       creatorId: userId,
-      creatorJoinId,
+      creatorJoinId: finalCreatorJoinId,
       isMainFamily: true
     });
 
@@ -38,7 +41,7 @@ const createFamily = async (req, res) => {
     const creatorMember = await FamilyMember.create({
       familyId: family._id,
       userId: userId,
-      joinId: creatorJoinId,
+      joinId: finalCreatorJoinId,
       firstName: user.firstName,
       lastName: user.lastName,
       relationship: 'Creator',
@@ -143,6 +146,8 @@ const addFamilyMember = async (req, res) => {
     const { firstName, lastName, relationship, birthYear, isDeceased, deathYear } = req.body;
     const userId = req.user.id;
 
+    console.log('🔍 Adding family member:', { familyId, firstName, lastName, relationship, birthYear, isDeceased, deathYear });
+
     // Validate required fields
     if (!firstName || !lastName || !relationship || !birthYear) {
       return res.status(400).json({
@@ -198,16 +203,22 @@ const addFamilyMember = async (req, res) => {
       });
     }
 
+    console.log('✅ Family validation passed, generating join ID...');
+
     // Generate unique join ID
     const joinId = await generateJoinId();
+    console.log('✅ Join ID generated:', joinId);
 
     // Handle avatar file upload if present
     let avatarUrl = null;
     if (req.file) {
+      console.log('📁 Avatar file uploaded:', req.file.filename);
       // TODO: Upload file to cloud storage (AWS S3, etc.)
       // For now, we'll store a placeholder
       avatarUrl = `/uploads/avatars/${req.file.filename}`;
     }
+
+    console.log('✅ Creating family member...');
 
     // Create family member
     const member = await FamilyMember.create({
@@ -223,6 +234,8 @@ const addFamilyMember = async (req, res) => {
       isFamilyCreator: false,
       avatarUrl
     });
+
+    console.log('✅ Family member created successfully:', member._id);
 
     logger.info(`Family member added: ${member.fullName} to family ${familyId}`);
 
@@ -247,12 +260,14 @@ const addFamilyMember = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('❌ Add family member error:', error);
     logger.error('Add family member error:', error);
     res.status(500).json({
       success: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Failed to add family member'
+        message: 'Failed to add family member',
+        details: error.message
       }
     });
   }
