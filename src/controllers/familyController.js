@@ -742,6 +742,212 @@ const validateJoinId = async (req, res) => {
   }
 };
 
+// @desc    Get a specific family by ID
+// @route   GET /api/families/:familyId
+// @access  Private
+const getFamilyById = async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const userId = req.user.id;
+
+    // Find the family
+    const family = await Family.findById(familyId);
+    if (!family) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Family not found'
+        }
+      });
+    }
+
+    // Check if user has access to this family
+    if (!family.isCreator(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You do not have access to this family'
+        }
+      });
+    }
+
+    // Get family members
+    const members = await FamilyMember.findByFamilyId(family._id);
+
+    // Get linked families
+    const linkedFamilies = await LinkedFamilies.findLinkedFamilies(family._id);
+    
+    // Get members from linked families
+    const linkedMembers = [];
+    for (const link of linkedFamilies) {
+      const linkedFamilyId = link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId._id 
+        : link.mainFamilyId._id;
+      
+      const linkedFamilyMembers = await FamilyMember.findByFamilyId(linkedFamilyId);
+      
+      // Add linked family info to each member
+      const linkedFamilyName = link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId.name 
+        : link.mainFamilyId.name;
+      
+      linkedMembers.push(...linkedFamilyMembers.map(member => ({
+        ...member.toObject(),
+        linkedFamilyName,
+        isLinkedMember: true
+      })));
+    }
+
+    // Format members for response
+    const formattedMembers = members.map(member => ({
+      id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      name: member.fullName,
+      relationship: member.relationship,
+      birthYear: member.birthYear,
+      isDeceased: member.isDeceased,
+      deathYear: member.deathYear,
+      isVerified: member.isVerified,
+      isFamilyCreator: member.isFamilyCreator,
+      joinId: member.joinId,
+      joinIdUsed: member.joinIdUsed,
+      avatarUrl: member.avatarUrl,
+      isLinkedMember: false
+    }));
+
+    // Format linked members
+    const formattedLinkedMembers = linkedMembers.map(member => ({
+      id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      name: member.fullName,
+      relationship: member.relationship,
+      birthYear: member.birthYear,
+      isDeceased: member.isDeceased,
+      deathYear: member.deathYear,
+      isVerified: member.isVerified,
+      isFamilyCreator: member.isFamilyCreator,
+      joinId: member.joinId,
+      joinIdUsed: member.joinIdUsed,
+      avatarUrl: member.avatarUrl,
+      linkedFamilyName: member.linkedFamilyName,
+      isLinkedMember: true
+    }));
+
+    // Format linked families info
+    const formattedLinkedFamilies = linkedFamilies.map(link => ({
+      id: link._id,
+      linkedFamilyId: link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId._id 
+        : link.mainFamilyId._id,
+      linkedFamilyName: link.mainFamilyId._id.toString() === family._id.toString() 
+        ? link.linkedFamilyId.name 
+        : link.mainFamilyId.name,
+      linkedAt: link.linkedAt,
+      linkedBy: link.linkedBy
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        family: {
+          id: family._id,
+          name: family.name,
+          creatorId: family.creatorId,
+          creatorJoinId: family.creatorJoinId,
+          isMainFamily: family.isMainFamily
+        },
+        members: formattedMembers,
+        linkedMembers: formattedLinkedMembers,
+        linkedFamilies: formattedLinkedFamilies,
+        totalMembers: formattedMembers.length + formattedLinkedMembers.length
+      }
+    });
+  } catch (error) {
+    logger.error('Get family by ID error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get family'
+      }
+    });
+  }
+};
+
+// @desc    Get family members only
+// @route   GET /api/families/:familyId/members
+// @access  Private
+const getFamilyMembers = async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const userId = req.user.id;
+
+    // Find the family
+    const family = await Family.findById(familyId);
+    if (!family) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Family not found'
+        }
+      });
+    }
+
+    // Check if user has access to this family
+    if (!family.isCreator(userId)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You do not have access to this family'
+        }
+      });
+    }
+
+    // Get family members
+    const members = await FamilyMember.findByFamilyId(family._id);
+
+    // Format members for response
+    const formattedMembers = members.map(member => ({
+      id: member._id,
+      firstName: member.firstName,
+      lastName: member.lastName,
+      name: member.fullName,
+      relationship: member.relationship,
+      birthYear: member.birthYear,
+      isDeceased: member.isDeceased,
+      deathYear: member.deathYear,
+      isVerified: member.isVerified,
+      isFamilyCreator: member.isFamilyCreator,
+      joinId: member.joinId,
+      joinIdUsed: member.joinIdUsed,
+      avatarUrl: member.avatarUrl
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        members: formattedMembers,
+        totalCount: formattedMembers.length
+      }
+    });
+  } catch (error) {
+    logger.error('Get family members error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get family members'
+      }
+    });
+  }
+};
+
 module.exports = {
   createFamily,
   getMyFamily,
@@ -750,5 +956,7 @@ module.exports = {
   deleteFamilyMember,
   generateMemberJoinId,
   linkFamily,
-  validateJoinId
+  validateJoinId,
+  getFamilyById,
+  getFamilyMembers
 }; 

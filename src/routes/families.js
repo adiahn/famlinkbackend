@@ -7,6 +7,8 @@ const validateRequest = require('../middleware/validateRequest');
 const {
   createFamily,
   getMyFamily,
+  getFamilyById,
+  getFamilyMembers,
   addFamilyMember,
   updateFamilyMember,
   deleteFamilyMember,
@@ -62,6 +64,8 @@ router.use(protect);
 // Family management routes
 router.post('/', validateRequest(createFamilySchema), createFamily);
 router.get('/my-family', getMyFamily);
+router.get('/:familyId', getFamilyById);
+router.get('/:familyId/members', getFamilyMembers);
 
 // Family member management routes
 router.post('/:familyId/members', upload.single('avatar'), validateRequest(addFamilyMemberSchema), addFamilyMember);
