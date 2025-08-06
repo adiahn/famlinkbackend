@@ -1,29 +1,25 @@
-const logger = require('./logger');
+const crypto = require('crypto');
 
-/**
- * Generate a unique join ID for family members
- * @returns {Promise<string>} A unique 12-character alphanumeric join ID
- */
 const generateJoinId = async () => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const length = 8;
-  
-  // Generate random join ID
-  let joinId = '';
-  for (let i = 0; i < length; i++) {
-    joinId += characters.charAt(Math.floor(Math.random() * characters.length));
+  try {
+    // Generate a more unique join ID with timestamp and random characters
+    const timestamp = Date.now().toString(36); // Convert timestamp to base36
+    const randomBytes = crypto.randomBytes(4).toString('hex'); // 8 random hex characters
+    const randomChars = Math.random().toString(36).substring(2, 6); // 4 random alphanumeric chars
+    
+    // Combine to create a 16-character unique ID
+    const joinId = `${timestamp.slice(-4)}${randomBytes}${randomChars}`.toUpperCase();
+    
+    console.log('🔑 Generated Join ID:', joinId);
+    
+    return joinId;
+  } catch (error) {
+    console.error('Error generating join ID:', error);
+    // Fallback to simple generation
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substring(2, 10);
+    return `${timestamp.slice(-4)}${random}`.toUpperCase();
   }
-
-  // Add timestamp to ensure uniqueness (last 4 digits)
-  const timestamp = Date.now().toString().slice(-4);
-  
-  // Create final join ID: 4 random chars + 4 timestamp digits
-  const finalJoinId = joinId.slice(0, 4) + timestamp;
-
-  logger.info(`Generated unique join ID: ${finalJoinId}`);
-  return finalJoinId;
 };
 
-module.exports = {
-  generateJoinId
-}; 
+module.exports = { generateJoinId }; 

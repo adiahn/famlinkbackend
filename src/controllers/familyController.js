@@ -96,82 +96,49 @@ const getMyFamily = async (req, res) => {
       });
     }
 
-    // Get family members
+    // Get family members (including linked members)
     const members = await FamilyMember.findByFamilyId(family._id);
 
     // Get linked families
     const linkedFamilies = await LinkedFamilies.findLinkedFamilies(family._id);
-    
-    // Get members from linked families
+
+    // Get linked members from other families
     const linkedMembers = [];
     for (const link of linkedFamilies) {
-      const linkedFamilyId = link.mainFamilyId._id.toString() === family._id.toString() 
+      const otherFamilyId = link.mainFamilyId._id.toString() === family._id.toString() 
         ? link.linkedFamilyId._id 
         : link.mainFamilyId._id;
-      
-      const linkedFamilyMembers = await FamilyMember.findByFamilyId(linkedFamilyId);
-      
-      // Add linked family info to each member
-      const linkedFamilyName = link.mainFamilyId._id.toString() === family._id.toString() 
-        ? link.linkedFamilyId.name 
-        : link.mainFamilyId.name;
-      
-      linkedMembers.push(...linkedFamilyMembers.map(member => ({
-        ...member.toObject(),
-        linkedFamilyName,
-        isLinkedMember: true
-      })));
+
+      const otherFamilyMembers = await FamilyMember.find({ 
+        familyId: otherFamilyId,
+        isLinkedMember: true,
+        originalFamilyId: family._id
+      });
+
+      linkedMembers.push(...otherFamilyMembers);
     }
 
-    // Format members for response
-    const formattedMembers = members.map(member => ({
-      id: member._id,
-      firstName: member.firstName,
-      lastName: member.lastName,
-      name: member.fullName,
-      relationship: member.relationship,
-      birthYear: member.birthYear,
-      isDeceased: member.isDeceased,
-      deathYear: member.deathYear,
-      isVerified: member.isVerified,
-      isFamilyCreator: member.isFamilyCreator,
-      joinId: member.joinId,
-      joinIdUsed: member.joinIdUsed,
-      avatarUrl: member.avatarUrl,
-      isLinkedMember: false
-    }));
+    // Combine all members
+    const allMembers = [
+      ...members.map(member => ({
+        ...member.toObject(),
+        isLinkedMember: false,
+        sourceFamily: family.name
+      })),
+      ...linkedMembers.map(member => ({
+        ...member.toObject(),
+        isLinkedMember: true,
+        sourceFamily: linkedFamilies.find(link => 
+          link.mainFamilyId._id.toString() === member.originalFamilyId.toString() ||
+          link.linkedFamilyId._id.toString() === member.originalFamilyId.toString()
+        )?.mainFamilyId._id.toString() === family._id.toString() 
+          ? link.linkedFamilyId.name 
+          : link.mainFamilyId.name
+      }))
+    ];
 
-    // Format linked members
-    const formattedLinkedMembers = linkedMembers.map(member => ({
-      id: member._id,
-      firstName: member.firstName,
-      lastName: member.lastName,
-      name: member.fullName,
-      relationship: member.relationship,
-      birthYear: member.birthYear,
-      isDeceased: member.isDeceased,
-      deathYear: member.deathYear,
-      isVerified: member.isVerified,
-      isFamilyCreator: member.isFamilyCreator,
-      joinId: member.joinId,
-      joinIdUsed: member.joinIdUsed,
-      avatarUrl: member.avatarUrl,
-      linkedFamilyName: member.linkedFamilyName,
-      isLinkedMember: true
-    }));
-
-    // Format linked families info
-    const formattedLinkedFamilies = linkedFamilies.map(link => ({
-      id: link._id,
-      linkedFamilyId: link.mainFamilyId._id.toString() === family._id.toString() 
-        ? link.linkedFamilyId._id 
-        : link.mainFamilyId._id,
-      linkedFamilyName: link.mainFamilyId._id.toString() === family._id.toString() 
-        ? link.linkedFamilyId.name 
-        : link.mainFamilyId.name,
-      linkedAt: link.linkedAt,
-      linkedBy: link.linkedBy
-    }));
+    // Sort by position
+    allMembers.sort((a, b) => a.position - b.position);
 
     res.json({
       success: true,
@@ -181,12 +148,26 @@ const getMyFamily = async (req, res) => {
           name: family.name,
           creatorId: family.creatorId,
           creatorJoinId: family.creatorJoinId,
-          isMainFamily: family.isMainFamily
+          isMainFamily: family.isMainFamily,
+          createdAt: family.createdAt
         },
-        members: formattedMembers,
-        linkedMembers: formattedLinkedMembers,
-        linkedFamilies: formattedLinkedFamilies,
-        totalMembers: formattedMembers.length + formattedLinkedMembers.length
+        members: allMembers,
+        linkedFamilies: linkedFamilies.map(link => ({
+          id: link.mainFamilyId._id.toString() === family._id.toString() 
+            ? link.linkedFamilyId._id 
+            : link.mainFamilyId._id,
+          name: link.mainFamilyId._id.toString() === family._id.toString() 
+            ? link.linkedFamilyId.name 
+            : link.mainFamilyId.name,
+          linkedAt: link.linkedAt,
+          linkedBy: link.linkedBy
+        })),
+        statistics: {
+          totalMembers: allMembers.length,
+          originalMembers: members.length,
+          linkedMembers: linkedMembers.length,
+          linkedFamilies: linkedFamilies.length
+        }
       }
     });
   } catch (error) {
@@ -572,6 +553,8 @@ const linkFamily = async (req, res) => {
     const { joinId } = req.body;
     const userId = req.user.id;
 
+    console.log('🔗 Linking family with join ID:', joinId);
+
     // Find member by join ID
     const member = await FamilyMember.findByJoinId(joinId);
     if (!member) {
@@ -653,25 +636,121 @@ const linkFamily = async (req, res) => {
       });
     }
 
-    // Mark join ID as used
-    await member.markJoinIdAsUsed();
+    // Start transaction for linking process
+    const session = await FamilyMember.startSession();
+    session.startTransaction();
 
-    // Create linked families relationship
-    await LinkedFamilies.createLink(userMainFamily._id, linkedFamily._id, userId);
+    try {
+      // Mark join ID as used
+      await member.markJoinIdAsUsed();
 
-    logger.info(`Family linked: ${userMainFamily.name} linked with ${linkedFamily.name}`);
+      // Create linked families relationship
+      const link = await LinkedFamilies.createLink(userMainFamily._id, linkedFamily._id, userId);
 
-    res.json({
-      success: true,
-      message: 'Family linked successfully',
-      data: {
-        linkedFamily: {
-          id: linkedFamily._id,
-          name: linkedFamily.name,
-          creatorName: member.fullName
+      // Get all members from the linked family
+      const linkedFamilyMembers = await FamilyMember.find({ familyId: linkedFamily._id });
+
+      // Create linked members in user's family
+      const linkedMembers = [];
+      for (const linkedMember of linkedFamilyMembers) {
+        // Skip the creator member (already exists)
+        if (linkedMember._id.toString() === member._id.toString()) {
+          continue;
         }
+
+        // Create a linked member in user's family
+        const newLinkedMember = new FamilyMember({
+          familyId: userMainFamily._id,
+          firstName: linkedMember.firstName,
+          lastName: linkedMember.lastName,
+          relationship: linkedMember.relationship,
+          birthYear: linkedMember.birthYear,
+          deathYear: linkedMember.deathYear,
+          isDeceased: linkedMember.isDeceased,
+          isVerified: linkedMember.isVerified,
+          isFamilyCreator: false,
+          isLinkedMember: true,
+          originalFamilyId: linkedFamily._id,
+          linkedFrom: linkedMember._id,
+          avatarUrl: linkedMember.avatarUrl,
+          bio: linkedMember.bio,
+          contactInfo: linkedMember.contactInfo,
+          socialLinks: linkedMember.socialLinks
+        });
+
+        await newLinkedMember.save({ session });
+        linkedMembers.push(newLinkedMember);
+
+        // Update the original member to point to the linked member
+        linkedMember.linkedTo = newLinkedMember._id;
+        await linkedMember.save({ session });
       }
-    });
+
+      // Get all members from user's family
+      const userFamilyMembers = await FamilyMember.find({ familyId: userMainFamily._id });
+
+      // Create linked members in the other family
+      const userLinkedMembers = [];
+      for (const userMember of userFamilyMembers) {
+        // Skip the creator member (already exists)
+        if (userMember._id.toString() === member._id.toString()) {
+          continue;
+        }
+
+        // Create a linked member in the other family
+        const newUserLinkedMember = new FamilyMember({
+          familyId: linkedFamily._id,
+          firstName: userMember.firstName,
+          lastName: userMember.lastName,
+          relationship: userMember.relationship,
+          birthYear: userMember.birthYear,
+          deathYear: userMember.deathYear,
+          isDeceased: userMember.isDeceased,
+          isVerified: userMember.isVerified,
+          isFamilyCreator: false,
+          isLinkedMember: true,
+          originalFamilyId: userMainFamily._id,
+          linkedFrom: userMember._id,
+          avatarUrl: userMember.avatarUrl,
+          bio: userMember.bio,
+          contactInfo: userMember.contactInfo,
+          socialLinks: userMember.socialLinks
+        });
+
+        await newUserLinkedMember.save({ session });
+        userLinkedMembers.push(newUserLinkedMember);
+
+        // Update the original member to point to the linked member
+        userMember.linkedTo = newUserLinkedMember._id;
+        await userMember.save({ session });
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      logger.info(`Family linked successfully: ${userMainFamily.name} linked with ${linkedFamily.name}`);
+
+      res.json({
+        success: true,
+        message: 'Family linked successfully',
+        data: {
+          linkedFamily: {
+            id: linkedFamily._id,
+            name: linkedFamily.name,
+            creatorName: member.fullName
+          },
+          linkedMembersCount: linkedMembers.length,
+          userLinkedMembersCount: userLinkedMembers.length,
+          totalLinkedMembers: linkedMembers.length + userLinkedMembers.length
+        }
+      });
+
+    } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+
   } catch (error) {
     logger.error('Link family error:', error);
     res.status(500).json({
@@ -948,6 +1027,71 @@ const getFamilyMembers = async (req, res) => {
   }
 };
 
+// @desc    Get member's join ID for sharing
+// @route   GET /api/families/members/:memberId/join-id
+// @access  Private
+const getMemberJoinId = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const userId = req.user.id;
+
+    // Find the member
+    const member = await FamilyMember.findById(memberId);
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Member not found'
+        }
+      });
+    }
+
+    // Check if user owns this family
+    const family = await Family.findById(member.familyId);
+    if (!family || family.creatorId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You can only get join IDs for members in your family'
+        }
+      });
+    }
+
+    // Check if join ID is already used
+    if (member.joinIdUsed) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'This join ID has already been used for linking'
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        memberId: member._id,
+        memberName: member.fullName,
+        joinId: member.joinId,
+        isFamilyCreator: member.isFamilyCreator,
+        canBeLinked: !member.joinIdUsed
+      }
+    });
+  } catch (error) {
+    logger.error('Get member join ID error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get member join ID'
+      }
+    });
+  }
+};
+
 module.exports = {
   createFamily,
   getMyFamily,
@@ -958,5 +1102,6 @@ module.exports = {
   linkFamily,
   validateJoinId,
   getFamilyById,
-  getFamilyMembers
+  getFamilyMembers,
+  getMemberJoinId
 }; 

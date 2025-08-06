@@ -7,14 +7,15 @@ const validateRequest = require('../middleware/validateRequest');
 const {
   createFamily,
   getMyFamily,
-  getFamilyById,
-  getFamilyMembers,
   addFamilyMember,
   updateFamilyMember,
   deleteFamilyMember,
   generateMemberJoinId,
   linkFamily,
-  validateJoinId
+  validateJoinId,
+  getFamilyById,
+  getFamilyMembers,
+  getMemberJoinId
 } = require('../controllers/familyController');
 const {
   createFamilySchema,
@@ -74,7 +75,11 @@ router.delete('/:familyId/members/:memberId', deleteFamilyMember);
 
 // Join ID system routes
 router.post('/:familyId/join-ids', validateRequest(generateJoinIdSchema), generateMemberJoinId);
+// Family linking routes
 router.post('/link', validateRequest(linkFamilySchema), linkFamily);
 router.get('/validate-join-id/:joinId', validateJoinId);
+
+// Member join ID routes
+router.get('/members/:memberId/join-id', getMemberJoinId);
 
 module.exports = router; 

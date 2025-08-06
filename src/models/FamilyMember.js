@@ -64,6 +64,18 @@ const familyMemberSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'FamilyMember'
   },
+  linkedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FamilyMember'
+  },
+  isLinkedMember: {
+    type: Boolean,
+    default: false
+  },
+  originalFamilyId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Family'
+  },
   avatarUrl: {
     type: String,
     maxlength: 500
