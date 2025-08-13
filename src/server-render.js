@@ -16,6 +16,7 @@ const notFound = require('./middleware/notFound');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const familyRoutes = require('./routes/families');
+const notificationRoutes = require('./routes/notifications');
 const searchRoutes = require('./routes/search');
 
 const app = express();
@@ -136,6 +137,7 @@ app.get('/api', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/families', familyRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/search', searchRoutes);
 
 // 404 handler

@@ -21,6 +21,20 @@ const familySchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  creationType: {
+    type: String,
+    enum: ['own_family', 'parents_family'],
+    default: 'own_family'
+  },
+  setupCompleted: {
+    type: Boolean,
+    default: false
+  },
+  currentStep: {
+    type: String,
+    enum: ['initialized', 'parent_setup', 'children_setup', 'completed'],
+    default: 'initialized'
+  },
   description: {
     type: String,
     maxlength: [1000, 'Description cannot be more than 1000 characters']
@@ -56,6 +70,20 @@ familySchema.virtual('memberCount', {
   localField: '_id',
   foreignField: 'familyId',
   count: true
+});
+
+// Virtual for branches
+familySchema.virtual('branches', {
+  ref: 'FamilyBranch',
+  localField: '_id',
+  foreignField: 'familyId'
+});
+
+// Virtual for creation flow
+familySchema.virtual('creationFlow', {
+  ref: 'FamilyCreationFlow',
+  localField: '_id',
+  foreignField: 'familyId'
 });
 
 // Index for search functionality

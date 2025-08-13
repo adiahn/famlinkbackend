@@ -55,9 +55,10 @@ const addFamilyMemberSchema = Joi.object({
       'string.max': 'Relationship cannot exceed 50 characters'
     }),
   birthYear: Joi.string()
-    .optional()
+    .required()
     .pattern(/^\d{4}$/)
     .messages({
+      'string.empty': 'Birth year is required',
       'string.pattern.base': 'Birth year must be a 4-digit year'
     }),
   isDeceased: Joi.boolean()
@@ -74,6 +75,17 @@ const addFamilyMemberSchema = Joi.object({
       'string.pattern.base': 'Death year must be a 4-digit year',
       'any.required': 'Death year is required when member is deceased',
       'any.forbidden': 'Death year should not be provided for living members'
+    }),
+  motherId: Joi.string()
+    .optional()
+    .messages({
+      'string.empty': 'Mother ID must be a valid string if provided'
+    }),
+  parentType: Joi.string()
+    .optional()
+    .valid('father', 'mother', 'child')
+    .messages({
+      'any.only': 'Parent type must be one of: father, mother, child'
     })
 });
 
@@ -148,6 +160,137 @@ const linkFamilySchema = Joi.object({
       'string.empty': 'Join ID is required',
       'string.length': 'Join ID must be exactly 8 characters',
       'string.pattern.base': 'Join ID must contain only uppercase letters and numbers'
+    }),
+  linkType: Joi.string()
+    .valid('child_family')
+    .default('child_family')
+    .messages({
+      'any.only': 'Link type must be "child_family"'
+    })
+});
+
+// Initialize family creation validation schema
+const initializeFamilyCreationSchema = Joi.object({
+  creationType: Joi.string()
+    .required()
+    .valid('own_family', 'parents_family')
+    .messages({
+      'string.empty': 'Creation type is required',
+      'any.only': 'Creation type must be either "own_family" or "parents_family"'
+    }),
+  familyName: Joi.string()
+    .optional()
+    .min(2)
+    .max(255)
+    .messages({
+      'string.min': 'Family name must be at least 2 characters long',
+      'string.max': 'Family name cannot exceed 255 characters'
+    })
+});
+
+// Setup parents validation schema
+const setupParentsSchema = Joi.object({
+  father: Joi.object({
+    firstName: Joi.string()
+      .required()
+      .min(1)
+      .max(100)
+      .trim()
+      .messages({
+        'string.empty': 'Father first name is required',
+        'string.min': 'Father first name must be at least 1 character long',
+        'string.max': 'Father first name cannot exceed 100 characters'
+      }),
+    lastName: Joi.string()
+      .required()
+      .min(1)
+      .max(100)
+      .trim()
+      .messages({
+        'string.empty': 'Father last name is required',
+        'string.min': 'Father last name must be at least 1 character long',
+        'string.max': 'Father last name cannot exceed 100 characters'
+      }),
+    birthYear: Joi.string()
+      .required()
+      .pattern(/^\d{4}$/)
+      .messages({
+        'string.empty': 'Father birth year is required',
+        'string.pattern.base': 'Father birth year must be a 4-digit year'
+      }),
+    isDeceased: Joi.boolean()
+      .default(false),
+    deathYear: Joi.string()
+      .optional()
+      .pattern(/^\d{4}$/)
+      .when('isDeceased', {
+        is: true,
+        then: Joi.required(),
+        otherwise: Joi.forbidden()
+      })
+      .messages({
+        'string.pattern.base': 'Father death year must be a 4-digit year',
+        'any.required': 'Father death year is required when deceased',
+        'any.forbidden': 'Father death year should not be provided for living members'
+      })
+  }).required(),
+  mothers: Joi.array()
+    .items(Joi.object({
+      firstName: Joi.string()
+        .required()
+        .min(1)
+        .max(100)
+        .trim()
+        .messages({
+          'string.empty': 'Mother first name is required',
+          'string.min': 'Mother first name must be at least 1 character long',
+          'string.max': 'Mother first name cannot exceed 100 characters'
+        }),
+      lastName: Joi.string()
+        .required()
+        .min(1)
+        .max(100)
+        .trim()
+        .messages({
+          'string.empty': 'Mother last name is required',
+          'string.min': 'Mother last name must be at least 1 character long',
+          'string.max': 'Mother last name cannot exceed 100 characters'
+        }),
+      birthYear: Joi.string()
+        .required()
+        .pattern(/^\d{4}$/)
+        .messages({
+          'string.empty': 'Mother birth year is required',
+          'string.pattern.base': 'Mother birth year must be a 4-digit year'
+        }),
+      isDeceased: Joi.boolean()
+        .default(false),
+      deathYear: Joi.string()
+        .optional()
+        .pattern(/^\d{4}$/)
+        .when('isDeceased', {
+          is: true,
+          then: Joi.required(),
+          otherwise: Joi.forbidden()
+        })
+        .messages({
+          'string.pattern.base': 'Mother death year must be a 4-digit year',
+          'any.required': 'Mother death year is required when deceased',
+          'any.forbidden': 'Mother death year should not be provided for living members'
+        }),
+      spouseOrder: Joi.number()
+        .required()
+        .min(1)
+        .messages({
+          'number.base': 'Spouse order must be a number',
+          'number.min': 'Spouse order must be at least 1'
+        })
+    }))
+    .min(1)
+    .required()
+    .messages({
+      'array.min': 'At least one mother is required',
+      'array.base': 'Mothers must be an array'
     })
 });
 
@@ -156,5 +299,7 @@ module.exports = {
   addFamilyMemberSchema,
   updateFamilyMemberSchema,
   generateJoinIdSchema,
-  linkFamilySchema
+  linkFamilySchema,
+  initializeFamilyCreationSchema,
+  setupParentsSchema
 }; 

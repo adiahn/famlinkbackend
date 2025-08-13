@@ -80,6 +80,29 @@ const familyMemberSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   },
+  motherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FamilyMember',
+    sparse: true
+  },
+  branchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FamilyBranch',
+    sparse: true
+  },
+  isRootMember: {
+    type: Boolean,
+    default: false
+  },
+  parentType: {
+    type: String,
+    enum: ['father', 'mother', 'child'],
+    required: [true, 'Parent type is required']
+  },
+  spouseOrder: {
+    type: Number,
+    min: [1, 'Spouse order must be at least 1']
+  },
   position: {
     type: Number,
     default: 0
@@ -130,9 +153,29 @@ familyMemberSchema.virtual('age').get(function() {
   return currentYear - birthYear;
 });
 
+// Virtual for children
+familyMemberSchema.virtual('children', {
+  ref: 'FamilyMember',
+  localField: '_id',
+  foreignField: 'motherId'
+});
+
+// Virtual for branch
+familyMemberSchema.virtual('branch', {
+  ref: 'FamilyBranch',
+  localField: 'branchId',
+  foreignField: '_id'
+});
+
 // Indexes
 familyMemberSchema.index({ familyId: 1, position: 1 });
 familyMemberSchema.index({ joinId: 1 }, { unique: true });
+familyMemberSchema.index({ familyId: 1, parentType: 1 });
+familyMemberSchema.index({ familyId: 1, branchId: 1 });
+familyMemberSchema.index({ motherId: 1 });
+familyMemberSchema.index({ branchId: 1 });
+familyMemberSchema.index({ isRootMember: 1 });
+familyMemberSchema.index({ spouseOrder: 1 });
 // userId index is automatically created by sparse: true in schema
 familyMemberSchema.index({ 
   firstName: 'text', 

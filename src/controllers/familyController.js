@@ -1,8 +1,11 @@
 const Family = require('../models/Family');
 const FamilyMember = require('../models/FamilyMember');
+const FamilyBranch = require('../models/FamilyBranch');
+const FamilyCreationFlow = require('../models/FamilyCreationFlow');
 const LinkedFamilies = require('../models/LinkedFamilies');
 const User = require('../models/User');
 const { generateJoinId } = require('../utils/generateJoinId');
+const NotificationService = require('../utils/notificationService');
 const logger = require('../utils/logger');
 
 // @desc    Create a new family
@@ -188,10 +191,10 @@ const getMyFamily = async (req, res) => {
 const addFamilyMember = async (req, res) => {
   try {
     const { familyId } = req.params;
-    const { firstName, lastName, relationship, birthYear, isDeceased, deathYear } = req.body;
+    const { firstName, lastName, relationship, birthYear, isDeceased, deathYear, motherId, parentType } = req.body;
     const userId = req.user.id;
 
-    console.log('🔍 Adding family member:', { familyId, firstName, lastName, relationship, birthYear, isDeceased, deathYear });
+    console.log('🔍 Adding family member:', { familyId, firstName, lastName, relationship, birthYear, isDeceased, deathYear, motherId, parentType });
 
     // Validate required fields
     if (!firstName || !lastName || !relationship || !birthYear) {
@@ -265,6 +268,59 @@ const addFamilyMember = async (req, res) => {
 
     console.log('✅ Creating family member...');
 
+    // Determine parent type and root member status based on relationship and provided parentType
+    let finalParentType = parentType || 'child';
+    let isRootMember = false;
+    let branchId = null;
+    
+    if (finalParentType === 'father' || relationship.toLowerCase().includes('father')) {
+      finalParentType = 'father';
+      isRootMember = true;
+    } else if (finalParentType === 'mother' || relationship.toLowerCase().includes('mother') || relationship.toLowerCase().includes('wife')) {
+      finalParentType = 'mother';
+      isRootMember = true;
+    } else if (finalParentType === 'child') {
+      // For children, validate motherId if provided
+      if (motherId) {
+        // Validate mother exists and belongs to this family
+        const mother = await FamilyMember.findOne({
+          _id: motherId,
+          familyId,
+          parentType: 'mother'
+        });
+
+        if (!mother) {
+          return res.status(404).json({
+            success: false,
+            error: {
+              code: 'NOT_FOUND',
+              message: 'Mother not found or not valid for this family'
+            }
+          });
+        }
+
+        // Validate age relationship
+        const motherBirthYear = parseInt(mother.birthYear);
+        const childBirthYear = parseInt(birthYear);
+        
+        if (childBirthYear <= motherBirthYear) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: 'Child must be born after mother'
+            }
+          });
+        }
+
+        // Get mother's branch
+        const branch = await FamilyBranch.findByMotherId(motherId);
+        if (branch) {
+          branchId = branch._id;
+        }
+      }
+    }
+
     // Create family member
     const member = await FamilyMember.create({
       familyId,
@@ -277,10 +333,17 @@ const addFamilyMember = async (req, res) => {
       joinId,
       isVerified: false,
       isFamilyCreator: false,
-      avatarUrl
+      avatarUrl,
+      parentType: finalParentType,
+      isRootMember,
+      motherId: finalParentType === 'child' ? motherId : undefined,
+      branchId
     });
 
     console.log('✅ Family member created successfully:', member._id);
+
+    // Create notification for family creator
+    await NotificationService.createMemberAddedNotification(familyId, member._id, userId);
 
     logger.info(`Family member added: ${member.fullName} to family ${familyId}`);
 
@@ -300,7 +363,11 @@ const addFamilyMember = async (req, res) => {
           isVerified: member.isVerified,
           isFamilyCreator: member.isFamilyCreator,
           joinId: member.joinId,
-          avatarUrl: member.avatarUrl
+          avatarUrl: member.avatarUrl,
+          parentType: member.parentType,
+          isRootMember: member.isRootMember,
+          motherId: member.motherId,
+          branchId: member.branchId
         }
       }
     });
@@ -370,6 +437,9 @@ const updateFamilyMember = async (req, res) => {
     member.deathYear = deathYear || member.deathYear;
 
     await member.save();
+
+    // Create notification for family creator
+    await NotificationService.createMemberUpdatedNotification(familyId, memberId, userId);
 
     logger.info(`Family member updated: ${member.fullName} in family ${familyId}`);
 
@@ -550,7 +620,7 @@ const generateMemberJoinId = async (req, res) => {
 // @access  Private
 const linkFamily = async (req, res) => {
   try {
-    const { joinId } = req.body;
+    const { joinId, linkType = 'child_family' } = req.body;
     const userId = req.user.id;
 
     console.log('🔗 Linking family with join ID:', joinId);
@@ -728,6 +798,21 @@ const linkFamily = async (req, res) => {
       await session.commitTransaction();
       session.endSession();
 
+      // Create notifications for both family creators
+      await NotificationService.createFamilyLinkedNotification(
+        userMainFamily.creatorId,
+        linkedFamily._id,
+        linkedFamily.name,
+        userId
+      );
+
+      await NotificationService.createFamilyLinkedNotification(
+        linkedFamily.creatorId,
+        userMainFamily._id,
+        userMainFamily.name,
+        userId
+      );
+
       logger.info(`Family linked successfully: ${userMainFamily.name} linked with ${linkedFamily.name}`);
 
       res.json({
@@ -737,11 +822,22 @@ const linkFamily = async (req, res) => {
           linkedFamily: {
             id: linkedFamily._id,
             name: linkedFamily.name,
-            creatorName: member.fullName
+            creatorName: member.fullName,
+            linkedAs: linkType
           },
-          linkedMembersCount: linkedMembers.length,
-          userLinkedMembersCount: userLinkedMembers.length,
-          totalLinkedMembers: linkedMembers.length + userLinkedMembers.length
+          mainFamily: {
+            id: userMainFamily._id,
+            name: userMainFamily.name
+          },
+          linkedMember: {
+            id: member._id,
+            name: member.fullName,
+            branch: member.branchId ? 'Has Branch' : 'No Branch'
+          },
+          integrationDetails: {
+            totalLinkedMembers: linkedMembers.length + userLinkedMembers.length,
+            branchStructure: linkType === 'child_family' ? 'Linked as child family' : 'Standard family link'
+          }
         }
       });
 
@@ -1092,6 +1188,403 @@ const getMemberJoinId = async (req, res) => {
   }
 };
 
+// @desc    Initialize family creation
+// @route   POST /api/families/initialize-creation
+// @access  Private
+const initializeFamilyCreation = async (req, res) => {
+  try {
+    const { creationType, familyName } = req.body;
+    const userId = req.user.id;
+
+    // Check if user already has an active family creation flow
+    const existingFlow = await FamilyCreationFlow.findActiveByUserId(userId);
+    if (existingFlow.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'CONFLICT',
+          message: 'User already has an active family creation flow'
+        }
+      });
+    }
+
+    // Generate family name if not provided
+    const finalFamilyName = familyName || `${req.user.firstName}'s Family`;
+
+    // Create the family
+    const family = await Family.create({
+      name: finalFamilyName,
+      creatorId: userId,
+      creatorJoinId: await generateJoinId(),
+      isMainFamily: true,
+      creationType,
+      currentStep: 'initialized'
+    });
+
+    // Create the creation flow
+    const creationFlow = await FamilyCreationFlow.create({
+      userId,
+      familyId: family._id,
+      creationType,
+      currentStep: 'initialized'
+    });
+
+    logger.info(`Family creation initialized: ${family.name} by user ${userId} (${creationType})`);
+
+    res.status(201).json({
+      success: true,
+      message: 'Family creation initialized',
+      data: {
+        familyId: family._id,
+        creationType,
+        currentStep: 'initialized',
+        nextStep: 'parent_setup'
+      }
+    });
+  } catch (error) {
+    logger.error('Initialize family creation error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to initialize family creation'
+      }
+    });
+  }
+};
+
+// @desc    Setup parents for family
+// @route   POST /api/families/:familyId/setup-parents
+// @access  Private
+const setupParents = async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const { father, mothers } = req.body;
+    const userId = req.user.id;
+
+    // Check if user owns this family
+    const family = await Family.findById(familyId);
+    if (!family || family.creatorId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You can only setup parents for your own family'
+        }
+      });
+    }
+
+    // Validate age relationships
+    const fatherBirthYear = parseInt(father.birthYear);
+    const motherBirthYears = mothers.map(m => parseInt(m.birthYear));
+    
+    // Father must be older than mothers
+    if (motherBirthYears.some(year => year < fatherBirthYear)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Father must be older than all mothers'
+        }
+      });
+    }
+
+    // Validate spouse order
+    const spouseOrders = mothers.map(m => m.spouseOrder).sort((a, b) => a - b);
+    if (!spouseOrders.every((order, index) => order === index + 1)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Spouse order must be sequential starting from 1'
+        }
+      });
+    }
+
+    // Create father
+    const fatherMember = await FamilyMember.create({
+      familyId,
+      firstName: father.firstName,
+      lastName: father.lastName,
+      birthYear: father.birthYear,
+      isDeceased: father.isDeceased,
+      deathYear: father.deathYear,
+      relationship: 'Father',
+      parentType: 'father',
+      isRootMember: true,
+      isVerified: true,
+      joinId: await generateJoinId(),
+      position: 1
+    });
+
+    // Create mothers and branches
+    const createdMothers = [];
+    const createdBranches = [];
+
+    for (const motherData of mothers) {
+      // Create mother
+      const motherMember = await FamilyMember.create({
+        familyId,
+        firstName: motherData.firstName,
+        lastName: motherData.lastName,
+        birthYear: motherData.birthYear,
+        isDeceased: motherData.isDeceased,
+        deathYear: motherData.deathYear,
+        relationship: `Wife ${motherData.spouseOrder}`,
+        parentType: 'mother',
+        isRootMember: true,
+        spouseOrder: motherData.spouseOrder,
+        isVerified: true,
+        joinId: await generateJoinId(),
+        position: 2 + motherData.spouseOrder
+      });
+
+      // Create branch for this mother
+      const branchName = motherData.spouseOrder === 1 ? 'First Wife\'s Branch' : `${motherData.spouseOrder}${getOrdinalSuffix(motherData.spouseOrder)} Wife\'s Branch`;
+      const branch = await FamilyBranch.create({
+        familyId,
+        motherId: motherMember._id,
+        branchName,
+        branchOrder: motherData.spouseOrder
+      });
+
+      // Update mother with branch ID
+      motherMember.branchId = branch._id;
+      await motherMember.save();
+
+      createdMothers.push(motherMember);
+      createdBranches.push(branch);
+    }
+
+    // Update family step
+    family.currentStep = 'parent_setup';
+    await family.save();
+
+    // Update creation flow
+    const creationFlow = await FamilyCreationFlow.findByFamilyId(familyId);
+    if (creationFlow) {
+      await creationFlow.markParentsSetupComplete();
+    }
+
+    logger.info(`Parents setup completed for family ${familyId}: ${father.firstName} ${father.lastName} and ${mothers.length} mothers`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Parents setup completed',
+      data: {
+        family: {
+          id: family._id,
+          name: family.name,
+          creationType: family.creationType,
+          currentStep: family.currentStep
+        },
+        father: {
+          id: fatherMember._id,
+          firstName: fatherMember.firstName,
+          lastName: fatherMember.lastName,
+          birthYear: fatherMember.birthYear,
+          isDeceased: fatherMember.isDeceased,
+          deathYear: fatherMember.deathYear
+        },
+        mothers: createdMothers.map(mother => ({
+          id: mother._id,
+          firstName: mother.firstName,
+          lastName: mother.lastName,
+          birthYear: mother.birthYear,
+          isDeceased: mother.isDeceased,
+          deathYear: mother.deathYear,
+          spouseOrder: mother.spouseOrder
+        })),
+        branches: createdBranches.map(branch => ({
+          id: branch._id,
+          name: branch.branchName,
+          order: branch.branchOrder
+        }))
+      }
+    });
+  } catch (error) {
+    logger.error('Setup parents error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to setup parents'
+      }
+    });
+  }
+};
+
+
+
+// @desc    Get family tree structure
+// @route   GET /api/families/:familyId/tree-structure
+// @access  Private
+const getFamilyTreeStructure = async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user owns this family
+    const family = await Family.findById(familyId);
+    if (!family || family.creatorId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You can only view your own family tree structure'
+        }
+      });
+    }
+
+    // Get all family members
+    const members = await FamilyMember.find({ familyId }).populate('branch');
+    
+    // Get branches
+    const branches = await FamilyBranch.findByFamilyId(familyId);
+
+    // Organize tree structure
+    const father = members.find(m => m.parentType === 'father');
+    const mothers = members.filter(m => m.parentType === 'mother').sort((a, b) => a.spouseOrder - b.spouseOrder);
+    const children = members.filter(m => m.parentType === 'child');
+
+    // Organize children by mother
+    const childrenByMother = {};
+    children.forEach(child => {
+      if (child.motherId) {
+        if (!childrenByMother[child.motherId.toString()]) {
+          childrenByMother[child.motherId.toString()] = [];
+        }
+        childrenByMother[child.motherId.toString()].push(child);
+      }
+    });
+
+    // Build tree structure
+    const treeStructure = {
+      father: father ? {
+        id: father._id,
+        name: `${father.firstName} ${father.lastName}`,
+        details: father
+      } : null,
+      mothers: mothers.map(mother => ({
+        id: mother._id,
+        name: `${mother.firstName} ${mother.lastName}`,
+        details: mother,
+        branch: branches.find(b => b.motherId.toString() === mother._id.toString()),
+        children: childrenByMother[mother._id.toString()] || []
+      })),
+      branches: branches,
+      statistics: {
+        totalMembers: members.length,
+        totalBranches: branches.length,
+        totalChildren: children.length
+      }
+    };
+
+    res.json({
+      success: true,
+      data: {
+        family: {
+          id: family._id,
+          name: family.name,
+          creationType: family.creationType
+        },
+        treeStructure
+      }
+    });
+  } catch (error) {
+    logger.error('Get family tree structure error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get family tree structure'
+      }
+    });
+  }
+};
+
+// @desc    Get available mothers for child
+// @route   GET /api/families/:familyId/available-mothers
+// @access  Private
+const getAvailableMothers = async (req, res) => {
+  try {
+    const { familyId } = req.params;
+    const userId = req.user.id;
+
+    // Check if user owns this family
+    const family = await Family.findById(familyId);
+    if (!family || family.creatorId.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'AUTHORIZATION_ERROR',
+          message: 'You can only view mothers in your own family'
+        }
+      });
+    }
+
+    // Get mothers with their branches and children count
+    const mothers = await FamilyMember.find({
+      familyId,
+      parentType: 'mother'
+    }).sort({ spouseOrder: 1 });
+
+    const mothersWithDetails = await Promise.all(
+      mothers.map(async (mother) => {
+        const branch = await FamilyBranch.findByMotherId(mother._id);
+        const childrenCount = await FamilyMember.countDocuments({
+          familyId,
+          motherId: mother._id
+        });
+
+        return {
+          id: mother._id,
+          name: `${mother.firstName} ${mother.lastName}`,
+          spouseOrder: mother.spouseOrder,
+          branchName: branch ? branch.branchName : 'Unknown Branch',
+          childrenCount
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: {
+        mothers: mothersWithDetails
+      }
+    });
+  } catch (error) {
+    logger.error('Get available mothers error:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to get available mothers'
+      }
+    });
+  }
+};
+
+// Helper function to get ordinal suffix
+const getOrdinalSuffix = (num) => {
+  const j = num % 10;
+  const k = num % 100;
+  if (j === 1 && k !== 11) return 'st';
+  if (j === 2 && k !== 12) return 'nd';
+  if (j === 3 && k !== 13) return 'rd';
+  return 'th';
+};
+
+// Helper function to get next position
+const getNextPosition = async (familyId) => {
+  const lastMember = await FamilyMember.findOne(
+    { familyId },
+    {},
+    { sort: { position: -1 } }
+  );
+  return lastMember ? lastMember.position + 1 : 1;
+};
+
 module.exports = {
   createFamily,
   getMyFamily,
@@ -1103,5 +1596,10 @@ module.exports = {
   validateJoinId,
   getFamilyById,
   getFamilyMembers,
-  getMemberJoinId
+  getMemberJoinId,
+  initializeFamilyCreation,
+  setupParents,
+
+  getFamilyTreeStructure,
+  getAvailableMothers
 }; 

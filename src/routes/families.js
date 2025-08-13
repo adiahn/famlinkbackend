@@ -15,14 +15,22 @@ const {
   validateJoinId,
   getFamilyById,
   getFamilyMembers,
-  getMemberJoinId
+  getMemberJoinId,
+  initializeFamilyCreation,
+  setupParents,
+
+  getFamilyTreeStructure,
+  getAvailableMothers
 } = require('../controllers/familyController');
 const {
   createFamilySchema,
   addFamilyMemberSchema,
   updateFamilyMemberSchema,
   generateJoinIdSchema,
-  linkFamilySchema
+  linkFamilySchema,
+  initializeFamilyCreationSchema,
+  setupParentsSchema,
+
 } = require('../validators/familyValidators');
 
 const router = express.Router();
@@ -64,9 +72,14 @@ router.use(protect);
 
 // Family management routes
 router.post('/', validateRequest(createFamilySchema), createFamily);
+router.post('/initialize-creation', validateRequest(initializeFamilyCreationSchema), initializeFamilyCreation);
 router.get('/my-family', getMyFamily);
 router.get('/:familyId', getFamilyById);
 router.get('/:familyId/members', getFamilyMembers);
+router.get('/:familyId/tree-structure', getFamilyTreeStructure);
+router.get('/:familyId/available-mothers', getAvailableMothers);
+router.post('/:familyId/setup-parents', upload.single('avatar'), validateRequest(setupParentsSchema), setupParents);
+
 
 // Family member management routes
 router.post('/:familyId/members', upload.single('avatar'), validateRequest(addFamilyMemberSchema), addFamilyMember);
